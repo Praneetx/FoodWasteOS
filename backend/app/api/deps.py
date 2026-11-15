@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hmac
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -58,6 +59,22 @@ def get_current_user(
         name=user.name,
         role=user.role,
     )
+
+
+def require_cron_secret(x_cron_secret: str | None = Header(default=None)) -> None:
+    """Service auth for scheduled jobs; a human JWT is never accepted here."""
+    expected = settings.cron_secret
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="cron endpoint is not configured",
+        )
+    if not x_cron_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing cron secret"
+        )
+    if not hmac.compare_digest(x_cron_secret.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid cron secret")
 
 
 def get_restaurant(

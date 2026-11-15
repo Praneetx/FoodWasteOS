@@ -1,0 +1,56 @@
+name: Nightly plan generation
+
+# Materialises tomorrow's preparation plan for every restaurant so it exists
+# before the kitchen opens. 20:30 UTC = 02:00 IST.
+#
+# Required repository secrets:
+#   API_URL      Base URL of the deployed API, e.g. https://foodwasteos-api.onrender.com
+#   CRON_SECRET  Same value as the API's CRON_SECRET environment variable
+
+on:
+  schedule:
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+    inputs:
+      days_ahead:
+        description: "How many upcoming days to generate (1-7)"
+        default: "1"
+        required: false
+
+concurrency:
+  group: nightly-plan
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call the cron endpoint
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DAYS_AHEAD: ${{ inputs.days_ahead || '1' }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "API_URL and CRON_SECRET repository secrets must be set" >&2
+            exit 1
+          fi
+
+          # Retries cover a cold-starting host (free-tier instances sleep).
+          curl --silent --show-error --fail-with-body \
+            --retry 4 --retry-delay 30 --retry-all-errors --max-time 180 \
+            --request POST "${API_URL%/}/api/v1/cron/generate" \
+            --header "X-Cron-Secret: ${CRON_SECRET}" \
+            --header "Content-Type: application/json" \
+            --data "{\"days_ahead\": ${DAYS_AHEAD}, \"force\": true}" \
+            --output report.json
+
+          echo "Run report:"
+          cat report.json
+
+          # A tenant-level failure still returns 200; fail the job so it alerts.
+          if [ "$(jq '.failed | length' report.json)" -gt 0 ]; then
+            echo "One or more restaurants failed plan generation" >&2
+            exit 1
+          fi

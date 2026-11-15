@@ -37,6 +37,24 @@ class GenerateRequest(BaseModel):
     force: bool = False
 
 
+class CronGenerateRequest(BaseModel):
+    days_ahead: int = Field(default=1, ge=1, le=7)
+    force: bool = True
+
+
+class CronFailure(BaseModel):
+    restaurant_id: uuid.UUID
+    error: str
+
+
+class CronGenerateOut(BaseModel):
+    restaurants: int
+    plans_generated: int
+    failed: list[CronFailure]
+    days_ahead: int
+    force: bool
+
+
 class AccuracyOut(BaseModel):
     window_days: int
     evaluated_items: int

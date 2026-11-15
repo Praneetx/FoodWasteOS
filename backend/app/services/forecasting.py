@@ -313,6 +313,46 @@ def generate_plan(
     return compose_plan(db, restaurant, target_date)
 
 
+def generate_for_all_restaurants(db: Session, *, days_ahead: int = 1, force: bool = True) -> dict:
+    """Materialise upcoming plans for every restaurant (nightly job).
+
+    Plans cover each restaurant's local tomorrow through ``days_ahead`` days out.
+    One tenant's failure is rolled back and reported without blocking the others.
+    Generation is idempotent, so re-running the job never duplicates forecast rows.
+    """
+    restaurants = list(db.scalars(select(Restaurant).order_by(Restaurant.created_at)))
+    plans = 0
+    failures: list[dict] = []
+
+    for restaurant in restaurants:
+        restaurant_id = restaurant.id
+        start = local_today(restaurant) + timedelta(days=1)
+        try:
+            for offset in range(days_ahead):
+                generate_plan(db, restaurant, start + timedelta(days=offset), force=force)
+                plans += 1
+        except Exception:  # noqa: BLE001 - one tenant must not stop the nightly run
+            db.rollback()
+            logger.exception("forecast.nightly_failed restaurant=%s", restaurant_id)
+            failures.append({"restaurant_id": restaurant_id, "error": "plan generation failed"})
+
+    logger.info(
+        "forecast.nightly restaurants=%s plans=%s failed=%s days_ahead=%s force=%s",
+        len(restaurants),
+        plans,
+        len(failures),
+        days_ahead,
+        force,
+    )
+    return {
+        "restaurants": len(restaurants),
+        "plans_generated": plans,
+        "failed": failures,
+        "days_ahead": days_ahead,
+        "force": force,
+    }
+
+
 def clear_plan(db: Session, restaurant_id: uuid.UUID, target_date: date) -> None:
     db.execute(
         delete(Forecast).where(
