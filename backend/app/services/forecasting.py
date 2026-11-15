@@ -265,6 +265,11 @@ def generate_plan(
         )
     )
     if not items:
+        # Every dish is inactive: drop any plan rows left over from before.
+        for row in existing:
+            db.delete(row)
+        if existing:
+            db.commit()
         return compose_plan(db, restaurant, target_date)
 
     history = _load_history(db, restaurant.id, target_date)
