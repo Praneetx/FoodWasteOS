@@ -22,6 +22,9 @@ dist/
 # Project docs (kept locally, not committed)
 docs/
 
+# Graphify knowledge-graph output (generated locally)
+graphify-out/
+
 # OS / editors
 .DS_Store
 .idea/
