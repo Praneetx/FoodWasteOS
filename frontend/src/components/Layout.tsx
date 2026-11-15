@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { longDate, todayISO } from "../lib/format";
 
 const NAV = [
@@ -60,6 +60,9 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
 
 export default function Layout() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const signOut = () => {
+    void supabase?.auth.signOut();
+  };
 
   return (
     <div className="min-h-dvh md:flex">
@@ -103,6 +106,15 @@ export default function Layout() {
           <p className="truncate text-xs text-stone-500">
             {me?.restaurant.location ?? "Set up your kitchen"}
           </p>
+          {isSupabaseConfigured && (
+            <button
+              type="button"
+              onClick={signOut}
+              className="mt-3 text-xs font-medium text-stone-500 underline underline-offset-2 hover:text-stone-900"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </aside>
 
@@ -120,7 +132,18 @@ export default function Layout() {
                 </p>
               </div>
             </div>
-            <span className="text-xs text-stone-500">{longDate(todayISO())}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-stone-500">{longDate(todayISO())}</span>
+              {isSupabaseConfigured && (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="-my-2 px-1 py-2 text-xs font-medium text-emerald-800 underline underline-offset-2"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
           </div>
           {!isSupabaseConfigured && (
             <p className="bg-amber-100 px-4 py-1.5 text-center text-[11px] font-medium text-amber-900">

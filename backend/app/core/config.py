@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     forecast_service_level: float = 0.85
     forecast_history_days: int = 180
     forecast_min_observations: int = 7
+    # A stored plan older than this is flagged stale in the API and UI.
+    plan_stale_hours: int = 36
     ml_artifact_dir: str = "./artifacts"
 
     max_csv_bytes: int = 5_000_000

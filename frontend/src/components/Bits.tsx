@@ -44,6 +44,18 @@ export function ErrorNotice({ message }: { message: string }) {
   );
 }
 
+export function WarningNotice({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div
+      role="alert"
+      className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      <p className="font-semibold">{title}</p>
+      {children && <div className="mt-1 leading-relaxed text-amber-900/80">{children}</div>}
+    </div>
+  );
+}
+
 export function LoadingBlock({ height = "h-40" }: { height?: string }) {
   return <div className={`animate-pulse rounded-2xl bg-stone-200/60 ${height}`} />;
 }

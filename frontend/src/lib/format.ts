@@ -43,6 +43,18 @@ export function shortDate(iso: string): string {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
+export function dateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function longDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   return date.toLocaleDateString("en-IN", {

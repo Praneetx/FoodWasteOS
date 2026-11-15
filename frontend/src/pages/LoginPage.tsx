@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 
-export default function LoginPage() {
+export default function LoginPage({ notice }: { notice?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +62,15 @@ export default function LoginPage() {
                 required
               />
             </label>
+
+            {notice && !error && (
+              <p
+                role="status"
+                className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-inset ring-amber-200"
+              >
+                {notice}
+              </p>
+            )}
 
             {error && (
               <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import Layout from "./components/Layout";
@@ -12,6 +13,8 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(isSupabaseConfigured);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!supabase) return;
@@ -23,11 +26,19 @@ export default function App() {
       setChecking(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
+      if (event === "SIGNED_IN") setSessionExpired(false);
+      // Never keep one user's cached restaurant data after they leave.
+      if (event === "SIGNED_OUT") queryClient.clear();
     });
 
-    const handleUnauthorized = () => setSession(null);
+    const handleUnauthorized = () => {
+      setSessionExpired(true);
+      // Drop the stale token locally too, otherwise a reload would restore it.
+      void supabase?.auth.signOut({ scope: "local" });
+      setSession(null);
+    };
     window.addEventListener("foodwasteos:unauthorized", handleUnauthorized);
 
     return () => {
@@ -35,7 +46,7 @@ export default function App() {
       listener.subscription.unsubscribe();
       window.removeEventListener("foodwasteos:unauthorized", handleUnauthorized);
     };
-  }, []);
+  }, [queryClient]);
 
   if (checking) {
     return (
@@ -48,7 +59,15 @@ export default function App() {
   }
 
   if (isSupabaseConfigured && !session) {
-    return <LoginPage />;
+    return (
+      <LoginPage
+        notice={
+          sessionExpired
+            ? "Your session has expired or is no longer valid. Please sign in again."
+            : undefined
+        }
+      />
+    );
   }
 
   return (

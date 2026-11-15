@@ -96,6 +96,18 @@ def test_plan_generates_recommendations(client):
     assert again["items"][0]["predicted_demand"] == item["predicted_demand"]
 
 
+def test_plan_is_flagged_stale_after_the_configured_threshold(client, monkeypatch):
+    from app.core.config import settings
+
+    create_item(client)
+    assert upload_csv(client, sales_csv("Chicken Biryani")).status_code == 200
+
+    assert client.get("/api/v1/forecasts/plan").json()["stale"] is False
+
+    monkeypatch.setattr(settings, "plan_stale_hours", 0)
+    assert client.get("/api/v1/forecasts/plan").json()["stale"] is True
+
+
 def test_plan_without_history_marks_collecting(client):
     create_item(client, "New Dish")
     plan = client.get("/api/v1/forecasts/plan").json()

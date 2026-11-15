@@ -225,7 +225,8 @@ def compose_plan(db: Session, restaurant: Restaurant, target_date: date) -> dict
         "target_date": target_date,
         "model": MODEL_LABEL,
         "generated_at": generated_at,
-        "stale": datetime.now(timezone.utc) - generated_at > timedelta(hours=36),
+        "stale": datetime.now(timezone.utc) - generated_at
+        > timedelta(hours=settings.plan_stale_hours),
         "insights": _insights(
             db,
             restaurant.id,

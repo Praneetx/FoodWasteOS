@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { longDate, quantity, shortDate, todayISO, tomorrowISO } from "../lib/format";
-import { ConfidenceBadge, ErrorNotice, LoadingBlock, PageHeader } from "../components/Bits";
+import { dateTime, longDate, quantity, todayISO, tomorrowISO } from "../lib/format";
+import {
+  ConfidenceBadge,
+  ErrorNotice,
+  LoadingBlock,
+  PageHeader,
+  WarningNotice,
+} from "../components/Bits";
 
 export default function PlannerPage() {
   const [date, setDate] = useState(tomorrowISO());
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["plan", date],
     queryFn: () => api.plan(date),
   });
@@ -40,8 +46,6 @@ export default function PlannerPage() {
     );
   }
 
-  if (error) return <ErrorNotice message={(error as Error).message} />;
-
   return (
     <>
       <PageHeader
@@ -70,6 +74,47 @@ export default function PlannerPage() {
         }
       />
 
+      {error && !data && (
+        <div className="card p-6" role="alert">
+          <p className="text-base font-semibold text-stone-900">
+            We couldn't generate this plan
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-stone-500">
+            Your sales and waste data are safe and nothing was changed. Try again, or pick another
+            date. If it keeps failing, the numbers below are not available yet — the plan never
+            shows made-up values.
+          </p>
+          <div className="mt-4">
+            <ErrorNotice message={(error as Error).message} />
+          </div>
+          <button
+            type="button"
+            className="btn-primary mt-4"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? "Trying…" : "Try again"}
+          </button>
+        </div>
+      )}
+
+      {regenerate.error && (
+        <div className="mb-4">
+          <ErrorNotice
+            message={`Couldn't refresh the plan: ${(regenerate.error as Error).message}. The previous numbers are still shown.`}
+          />
+        </div>
+      )}
+
+      {data?.stale && (
+        <div className="mb-4">
+          <WarningNotice title="This plan is out of date">
+            It was generated {dateTime(data.generated_at)}, so recent sales are not reflected. Press
+            “Refresh numbers” to rebuild it.
+          </WarningNotice>
+        </div>
+      )}
+
       {data && (
         <>
           <div className="card overflow-hidden">
@@ -81,7 +126,6 @@ export default function PlannerPage() {
                 <p className="mt-1 text-sm text-stone-600">
                   Model <span className="font-medium text-stone-800">{data.model}</span> ·{" "}
                   {ready.length} of {data.items.length} dishes forecast
-                  {data.stale ? " · plan is stale, regenerate for fresh numbers" : ""}
                 </p>
               </div>
               <button
@@ -128,7 +172,7 @@ export default function PlannerPage() {
             <div className="flex items-center justify-between px-5 py-4">
               <h2 className="text-sm font-semibold text-stone-900">Tomorrow's preparation plan</h2>
               <span className="text-xs text-stone-500">
-                Generated {shortDate(data.generated_at.slice(0, 10))}
+                Generated {dateTime(data.generated_at)}
               </span>
             </div>
             <div className="overflow-x-auto">
