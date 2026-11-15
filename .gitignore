@@ -19,6 +19,9 @@ dist/
 .env.local
 .env.*.local
 
+# Project docs (kept locally, not committed)
+docs/
+
 # OS / editors
 .DS_Store
 .idea/
