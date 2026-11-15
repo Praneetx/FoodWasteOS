@@ -38,3 +38,14 @@ def client():
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def db_session(client):
+    """A session on the same in-memory database the test client uses."""
+    generator = app.dependency_overrides[get_db]()
+    session = next(generator)
+    try:
+        yield session
+    finally:
+        generator.close()

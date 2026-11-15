@@ -20,6 +20,7 @@ from sqlalchemy import (
     Uuid,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -155,7 +156,10 @@ class ModelRun(Base):
     mae: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
     wape: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
     bias: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
-    params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # jsonb on Postgres (matches supabase/schema.sql); plain JSON on SQLite for tests/demo.
+    params: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), nullable=False, default=dict
+    )
     artifact_path: Mapped[str | None] = mapped_column(Text)
 
 

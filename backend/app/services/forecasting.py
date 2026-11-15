@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import DailySale, FoodItem, Forecast, Restaurant
 from app.ml.baseline import DOW_NAMES, METHOD, recommend_preparation, weekday_average_forecast
+from app.services.model_runs import record_run
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,18 @@ def generate_plan(
     for item_id, row in existing_by_item.items():
         if item_id not in generated:
             db.delete(row)
+
+    if generated:
+        record_run(
+            db,
+            restaurant,
+            model_type=MODEL_LABEL,
+            target_date=target_date,
+            as_of=local_today(restaurant),
+            history=history,
+            items_forecast=len(generated),
+            items_collecting=len(items) - len(generated),
+        )
 
     db.commit()
     logger.info(

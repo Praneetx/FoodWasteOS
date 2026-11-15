@@ -5,8 +5,6 @@ from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.db.models import Forecast, Restaurant
-from app.db.session import get_db
-from app.main import app
 from app.services import forecasting
 from tests.test_api import create_item, sales_csv, upload_csv
 
@@ -19,16 +17,6 @@ def cron_secret(monkeypatch):
     monkeypatch.setattr(settings, "cron_secret", SECRET)
     return SECRET
 
-
-@pytest.fixture()
-def db_session():
-    """A session on the same in-memory database the test client uses."""
-    generator = app.dependency_overrides[get_db]()
-    session = next(generator)
-    try:
-        yield session
-    finally:
-        generator.close()
 
 
 def seed_tenant(client) -> None:

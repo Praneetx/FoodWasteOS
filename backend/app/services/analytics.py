@@ -11,11 +11,11 @@ import logging
 import uuid
 from datetime import date, timedelta
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import DailySale, FoodItem, FoodWaste, Forecast, Restaurant
-from app.ml.evaluate import ForecastError, metrics
+from app.db.models import DailySale, FoodItem, FoodWaste, Restaurant
+from app.services.evaluation import evaluate_rows, forecast_actual_rows
 from app.services.forecasting import generate_plan, local_today, typical_weekday_total
 
 logger = logging.getLogger(__name__)
@@ -207,33 +207,8 @@ def accuracy(db: Session, restaurant: Restaurant, days: int = 28) -> dict:
     end = local_today(restaurant)
     start = end - timedelta(days=max(days, 1))
 
-    rows = db.execute(
-        select(Forecast, DailySale.quantity_sold)
-        .join(
-            DailySale,
-            and_(
-                DailySale.food_item_id == Forecast.food_item_id,
-                DailySale.sale_date == Forecast.target_date,
-            ),
-        )
-        .where(
-            Forecast.restaurant_id == restaurant.id,
-            Forecast.target_date >= start,
-            Forecast.target_date < end,
-        )
-    ).all()
-
-    errors = [
-        ForecastError(
-            target_date=forecast.target_date,
-            actual=float(quantity),
-            predicted=float(forecast.predicted_demand),
-            lower=None if forecast.lower_bound is None else float(forecast.lower_bound),
-            upper=None if forecast.upper_bound is None else float(forecast.upper_bound),
-        )
-        for forecast, quantity in rows
-    ]
-    result = metrics(errors)
+    rows = forecast_actual_rows(db, restaurant.id, start, end)
+    result = evaluate_rows(rows)
 
     stockout_days = db.scalar(
         select(func.count(func.distinct(DailySale.sale_date))).where(
