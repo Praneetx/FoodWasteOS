@@ -3,6 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { inr, quantity, shortDate, todayISO } from "../lib/format";
 import { ErrorNotice, PageHeader } from "../components/Bits";
+import type { WasteReason } from "../types";
+
+const WASTE_REASONS: { value: WasteReason; label: string }[] = [
+  { value: "unsold", label: "Unsold at close" },
+  { value: "overproduction", label: "Overproduction" },
+  { value: "spoilage", label: "Spoilage" },
+  { value: "expired", label: "Expired" },
+  { value: "other", label: "Other" },
+];
+
+const reasonLabel = (reason: string) =>
+  WASTE_REASONS.find((entry) => entry.value === reason)?.label ?? reason;
 
 const TEMPLATE_URL = `${(import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")}/api/v1/sales/template.csv`;
 
@@ -10,6 +22,7 @@ export default function SalesEntryPage() {
   const queryClient = useQueryClient();
   const { data: items } = useQuery({ queryKey: ["items"], queryFn: api.foodItems });
   const { data: sales } = useQuery({ queryKey: ["sales"], queryFn: api.sales });
+  const { data: waste } = useQuery({ queryKey: ["waste"], queryFn: api.waste });
 
   const [file, setFile] = useState<File | null>(null);
   const [itemId, setItemId] = useState("");
@@ -20,13 +33,20 @@ export default function SalesEntryPage() {
   const [stockout, setStockout] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [newDish, setNewDish] = useState({ name: "", batch: "5", cost: "" });
+  const [wasteItemId, setWasteItemId] = useState("");
+  const [wasteDate, setWasteDate] = useState(todayISO());
+  const [wasteQty, setWasteQty] = useState("");
+  const [wasteReason, setWasteReason] = useState<WasteReason>("unsold");
+  const [wasteNotes, setWasteNotes] = useState("");
 
   useEffect(() => {
     if (!itemId && items && items.length > 0) setItemId(items[0].id);
-  }, [items, itemId]);
+    if (!wasteItemId && items && items.length > 0) setWasteItemId(items[0].id);
+  }, [items, itemId, wasteItemId]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["sales"] });
+    queryClient.invalidateQueries({ queryKey: ["waste"] });
     queryClient.invalidateQueries({ queryKey: ["items"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["plan"] });
@@ -64,6 +84,25 @@ export default function SalesEntryPage() {
     },
   });
 
+  const saveWaste = useMutation({
+    mutationFn: () =>
+      api.createWaste({
+        food_item_id: wasteItemId,
+        waste_date: wasteDate,
+        quantity_wasted: Number(wasteQty),
+        reason: wasteReason,
+        notes: wasteNotes.trim() === "" ? null : wasteNotes.trim(),
+      }),
+    onSuccess: () => {
+      setNotice("Waste saved. Dashboard and analytics are updated.");
+      setWasteQty("");
+      setWasteNotes("");
+      refresh();
+    },
+  });
+
+  const wasteQtyValid = Number(wasteQty) > 0;
+
   const createDish = useMutation({
     mutationFn: () =>
       api.createFoodItem({
@@ -81,6 +120,7 @@ export default function SalesEntryPage() {
   const uploadError = upload.error as Error | null;
   const saleError = saveSale.error as Error | null;
   const dishError = createDish.error as Error | null;
+  const wasteError = saveWaste.error as Error | null;
 
   return (
     <>
@@ -171,8 +211,7 @@ export default function SalesEntryPage() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-stone-900">Add today's numbers</h2>
           <p className="mt-1 text-sm leading-relaxed text-stone-500">
-            Record what sold and what you prepared. Waste is derived from the difference if you
-            leave it out.
+            Record what sold and what you prepared. Unsold food is recorded separately below.
           </p>
 
           <form
@@ -269,6 +308,148 @@ export default function SalesEntryPage() {
               {saveSale.isPending ? "Saving…" : "Save numbers"}
             </button>
           </form>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-5">
+        <div className="card p-5 lg:col-span-2">
+          <h2 className="text-sm font-semibold text-stone-900">Record waste</h2>
+          <p className="mt-1 text-sm leading-relaxed text-stone-500">
+            Log food that was thrown away. Saving the same dish, date and reason again replaces the
+            earlier quantity.
+          </p>
+
+          <form
+            className="mt-4 space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (wasteQtyValid) saveWaste.mutate();
+            }}
+          >
+            <label className="block">
+              <span className="label">Dish</span>
+              <select
+                className="field"
+                value={wasteItemId}
+                onChange={(event) => setWasteItemId(event.target.value)}
+                required
+              >
+                <option value="" disabled>
+                  Select a dish
+                </option>
+                {(items ?? []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="label">Date</span>
+                <input
+                  type="date"
+                  className="field"
+                  value={wasteDate}
+                  onChange={(event) => setWasteDate(event.target.value)}
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="label">Quantity wasted</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  className="field"
+                  placeholder="3"
+                  value={wasteQty}
+                  onChange={(event) => setWasteQty(event.target.value)}
+                  required
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="label">Reason</span>
+              <select
+                className="field"
+                value={wasteReason}
+                onChange={(event) => setWasteReason(event.target.value as WasteReason)}
+              >
+                {WASTE_REASONS.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="label">Notes (optional)</span>
+              <input
+                className="field"
+                maxLength={500}
+                placeholder="e.g. power cut in the evening"
+                value={wasteNotes}
+                onChange={(event) => setWasteNotes(event.target.value)}
+              />
+            </label>
+
+            {wasteQty !== "" && !wasteQtyValid && (
+              <p className="text-xs text-rose-700">Quantity must be greater than 0.</p>
+            )}
+            {wasteError && <ErrorNotice message={wasteError.message} />}
+
+            <button
+              type="submit"
+              className="btn-primary w-full"
+              disabled={saveWaste.isPending || !wasteItemId || !wasteQtyValid}
+            >
+              {saveWaste.isPending ? "Saving…" : "Save waste"}
+            </button>
+          </form>
+        </div>
+
+        <div className="card overflow-hidden lg:col-span-3">
+          <div className="flex items-center justify-between px-5 py-4">
+            <h2 className="text-sm font-semibold text-stone-900">Recent waste</h2>
+            <span className="text-xs text-stone-500">Last 30 days</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] border-t border-stone-100">
+              <thead className="bg-stone-50/70">
+                <tr>
+                  <th className="th">Date</th>
+                  <th className="th">Dish</th>
+                  <th className="th">Reason</th>
+                  <th className="th text-right">Wasted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {(waste ?? []).slice(0, 12).map((row) => (
+                  <tr key={row.id}>
+                    <td className="td whitespace-nowrap text-stone-500">
+                      {shortDate(row.waste_date)}
+                    </td>
+                    <td className="td">{row.food_item}</td>
+                    <td className="td text-stone-500">{reasonLabel(row.reason)}</td>
+                    <td className="td text-right tabular-nums text-amber-700">
+                      {quantity(row.quantity_wasted)}
+                    </td>
+                  </tr>
+                ))}
+                {(waste ?? []).length === 0 && (
+                  <tr>
+                    <td className="td text-stone-500" colSpan={4}>
+                      No waste recorded yet. Use the form to log unsold or spoiled food.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

@@ -7,6 +7,8 @@ import type {
   Me,
   Plan,
   SaleRow,
+  WasteReason,
+  WasteRow,
 } from "../types";
 import { getAccessToken } from "./supabase";
 
@@ -78,6 +80,20 @@ export const api = {
     stockout?: boolean;
   }) =>
     request<SaleRow>("/sales", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  waste: () => request<WasteRow[]>("/waste"),
+
+  createWaste: (payload: {
+    food_item_id: string;
+    waste_date: string;
+    quantity_wasted: number;
+    reason: WasteReason;
+    notes?: string | null;
+  }) =>
+    request<WasteRow>("/waste", {
       method: "POST",
       body: JSON.stringify(payload),
     }),

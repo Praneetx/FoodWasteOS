@@ -20,6 +20,17 @@ export interface SaleRow {
   stockout: boolean;
 }
 
+export type WasteReason = "overproduction" | "unsold" | "spoilage" | "expired" | "other";
+
+export interface WasteRow {
+  id: string;
+  food_item_id: string;
+  food_item: string;
+  waste_date: string;
+  quantity_wasted: number;
+  reason: WasteReason;
+}
+
 export interface ImportReport {
   imported: number;
   items_created: string[];
