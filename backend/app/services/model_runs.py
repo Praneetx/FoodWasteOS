@@ -9,7 +9,7 @@ run is never recorded without its plan (and vice versa).
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pandas as pd
@@ -69,6 +69,7 @@ def record_run(
     run = ModelRun(
         restaurant_id=restaurant.id,
         model_type=model_type,
+        trained_at=datetime.now(timezone.utc),
         train_start=train_start,
         train_end=train_end,
         mae=_decimal(accuracy["mae"], 3) if accuracy else None,

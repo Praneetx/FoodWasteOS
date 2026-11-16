@@ -59,6 +59,8 @@ single-outlet restaurants, starting with **Navi Mumbai**.
 | Dashboard (today, 14-day sold-vs-wasted trend, tomorrow's prep) | ✅ |
 | Analytics (waste trend, cost of waste, top wasted dishes, forecast accuracy) | ✅ |
 | Supabase Auth JWT verification, tenant scoping, role checks | ✅ |
+| Nightly scheduled plan generation (GitHub Actions + secret-protected endpoint) | ✅ |
+| Model-run audit trail per generation | ✅ |
 | Random Forest challenger + walk-forward backtesting harness | 🧪 experimental, not default |
 | Random Forest as default, notifications, billing | ⏳ not yet |
 
@@ -79,7 +81,7 @@ React SPA (Vite + TypeScript + Tailwind + React Query + Recharts)
         ▼
 FastAPI modular monolith
   api/v1   → routers (thin, schema-validated)
-  services → catalog, sales, waste, forecasting, analytics
+  services → catalog, sales, waste, forecasting, model runs, evaluation, analytics
   ml       → features, baseline, rf, evaluate, registry (in-process)
         │  SQLAlchemy 2.0, one session per request
         ▼
@@ -196,7 +198,9 @@ VITE_API_URL=http://localhost:8000 npm run dev
 | `SUPABASE_JWT_SECRET` | Only for legacy HS256 projects; leave empty to use JWKS |
 | `FORECAST_SERVICE_LEVEL` | Band width target (default `0.85`) |
 | `FORECAST_HISTORY_DAYS` | Lookback window (default `180`) |
-| `ML_ARTIFACT_DIR` | Where trained models are stored locally |
+| `PLAN_STALE_HOURS` | Age after which a stored plan is flagged stale (default `36`) |
+| `CRON_SECRET` | Shared secret for `POST /cron/generate`; empty disables it |
+| `ML_ARTIFACT_DIR` | Where trained models are stored locally (registry not yet wired) |
 
 The frontend reads `VITE_API_URL`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
@@ -207,9 +211,9 @@ The frontend reads `VITE_API_URL`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_K
 
 ## API
 
-All endpoints live under `/api/v1` and require a bearer token (except `/health`). Interactive docs
-are served at `/docs` when the API is running. Payload shapes and examples are in
-[`docs/API.md`](docs/API.md).
+All endpoints live under `/api/v1` and require a bearer token (except `/health` and the
+secret-protected `/cron/generate`). Interactive docs are served at `/docs` when the API is running.
+Payload shapes and examples are in [`docs/API.md`](docs/API.md).
 
 | Area | Endpoints |
 | --- | --- |
@@ -218,6 +222,7 @@ are served at `/docs` when the API is running. Payload shapes and examples are i
 | **Sales** | `GET /sales` · `POST /sales` · `POST /sales/import` · `GET /sales/template.csv` |
 | **Waste** | `GET /waste` · `POST /waste` |
 | **Forecasts** | `GET /forecasts/plan?target_date=YYYY-MM-DD` · `POST /forecasts/generate` · `GET /forecasts/accuracy?days=28` |
+| **Scheduled** | `POST /cron/generate` (all tenants; `X-Cron-Secret`, no user token) |
 | **Insights** | `GET /dashboard` · `GET /analytics/summary?days=30` |
 
 **Role checks:** creating or editing dishes, importing CSVs and regenerating plans require the
@@ -233,7 +238,7 @@ created automatically, so a first upload is never blocked. A ready-made template
 `restaurants` · `users` · `food_items` · `daily_sales` · `food_waste` · `forecasts` · `model_runs`
 
 The canonical DDL is in [`supabase/schema.sql`](supabase/schema.sql); the reasoning behind the
-model is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+model is in [`docs/07-architecture.md`](docs/07-architecture.md).
 
 ## Testing
 
@@ -246,8 +251,11 @@ cd frontend && npm run typecheck && npm run build
 ```
 
 The backend suite covers idempotent upserts, partial-success CSV import, plan generation,
-cold-start behaviour, waste cost maths, the recommendation formula, band and confidence
-output, walk-forward metrics, and the no-leakage guarantee for rolling features.
+cold-start behaviour, waste cost maths and the waste-rate formula, auth/role/tenancy isolation,
+scheduled generation, model-run auditing, the recommendation formula, band and confidence output,
+walk-forward metrics, and the no-leakage guarantee for rolling features.
+
+CI (`.github/workflows/ci.yml`) runs pytest, `tsc --noEmit` and `vite build` on every push and PR.
 
 ## Project layout
 
@@ -260,7 +268,7 @@ FoodWasteOS/
 │   │   ├── db/          # models, session, demo seed
 │   │   ├── ml/          # features, baseline, random forest, evaluation, registry
 │   │   ├── schemas/     # Pydantic contracts
-│   │   └── services/    # catalog, sales, waste, forecasting, analytics
+│   │   └── services/    # catalog, sales, waste, forecasting, model runs, evaluation, analytics
 │   ├── tests/
 │   └── Dockerfile
 ├── frontend/
@@ -271,7 +279,7 @@ FoodWasteOS/
 ├── supabase/
 │   └── schema.sql       # canonical database schema
 ├── docs/
-│   ├── ARCHITECTURE.md  # decisions, data model, ML rules, security, scaling
+│   ├── 01-prd.md … 10-readme.md  # product, flows, stack, schema, architecture, plan
 │   └── API.md           # endpoint contract and payload examples
 └── docker-compose.yml
 ```

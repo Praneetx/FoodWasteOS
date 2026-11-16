@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import update
+
+from app.db.models import Forecast
 
 
 def create_item(client, name: str = "Chicken Biryani") -> dict:
@@ -96,7 +99,7 @@ def test_plan_generates_recommendations(client):
     assert again["items"][0]["predicted_demand"] == item["predicted_demand"]
 
 
-def test_plan_is_flagged_stale_after_the_configured_threshold(client, monkeypatch):
+def test_plan_is_flagged_stale_after_the_configured_threshold(client, db_session, monkeypatch):
     from app.core.config import settings
 
     create_item(client)
@@ -104,7 +107,17 @@ def test_plan_is_flagged_stale_after_the_configured_threshold(client, monkeypatc
 
     assert client.get("/api/v1/forecasts/plan").json()["stale"] is False
 
-    monkeypatch.setattr(settings, "plan_stale_hours", 0)
+    # Age the stored plan by two hours so the boundary is deterministic.
+    db_session.execute(
+        update(Forecast).values(
+            generated_at=datetime.now(timezone.utc) - timedelta(hours=2)
+        )
+    )
+    db_session.commit()
+
+    assert client.get("/api/v1/forecasts/plan").json()["stale"] is False
+
+    monkeypatch.setattr(settings, "plan_stale_hours", 1)
     assert client.get("/api/v1/forecasts/plan").json()["stale"] is True
 
 
@@ -143,3 +156,39 @@ def test_dashboard_includes_tomorrow(client):
     assert len(body["series"]) == 14
     assert body["tomorrow"] is not None
     assert body["tomorrow"]["predicted_total"] > 0
+
+
+def test_waste_rate_is_sales_plus_waste_on_dashboard_and_analytics(client):
+    item = create_item(client)
+    today = date.today().isoformat()
+    assert (
+        client.post(
+            "/api/v1/sales",
+            json={
+                "food_item_id": item["id"],
+                "sale_date": today,
+                "quantity_sold": 90,
+                "prepared_quantity": 200,
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/waste",
+            json={
+                "food_item_id": item["id"],
+                "waste_date": today,
+                "quantity_wasted": 10,
+                "reason": "unsold",
+            },
+        ).status_code
+        == 201
+    )
+
+    dashboard = client.get("/api/v1/dashboard").json()
+    summary = client.get("/api/v1/analytics/summary?days=7").json()
+
+    # prepared_quantity is deliberately ignored: 10 / (90 + 10), not 10 / 200.
+    assert dashboard["waste_rate"] == pytest.approx(0.1)
+    assert summary["waste_rate"] == pytest.approx(0.1)

@@ -86,7 +86,7 @@ export default function AnalyticsPage() {
           label="Units wasted"
           value={quantity(data.waste_quantity)}
           tone={data.waste_quantity > 0 ? "warn" : "good"}
-          hint={`${percent(data.waste_rate)} of prepared food`}
+          hint={`${percent(data.waste_rate)} of food sold or wasted`}
         />
         <StatCard
           label="Estimated waste cost"

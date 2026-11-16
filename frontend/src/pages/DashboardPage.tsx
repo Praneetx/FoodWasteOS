@@ -85,7 +85,7 @@ export default function DashboardPage() {
           label="Unsold today"
           value={quantity(data.waste_quantity)}
           tone={data.waste_quantity > 0 ? "warn" : "good"}
-          hint={`${percent(data.waste_rate)} of everything prepared`}
+          hint={`${percent(data.waste_rate)} of food sold or wasted`}
         />
         <StatCard
           label="Est. waste cost"

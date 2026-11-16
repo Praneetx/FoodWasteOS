@@ -83,6 +83,16 @@ def _waste_totals(detail: list[dict]) -> tuple[float, float, bool]:
     return total_quantity, total_cost, bool(known)
 
 
+def waste_rate(sales_quantity: float, waste_quantity: float) -> float:
+    """Waste as a share of food that left the kitchen (sold or wasted).
+
+    This is the single pilot definition for both dashboard and analytics.
+    ``prepared_quantity`` is optional, so using it would leave gaps in the rate.
+    """
+    denominator = sales_quantity + waste_quantity
+    return round(waste_quantity / denominator, 4) if denominator else 0.0
+
+
 def dashboard(db: Session, restaurant: Restaurant, on_date: date) -> dict:
     start = on_date - timedelta(days=13)
     sales = _daily_sales(db, restaurant.id, start, on_date)
@@ -107,7 +117,6 @@ def dashboard(db: Session, restaurant: Restaurant, on_date: date) -> dict:
         [row for row in waste_detail if row["date"] == on_date]
     )
 
-    denominator = sales_today + waste_today
     tomorrow_date = on_date + timedelta(days=1)
     tomorrow = None
     try:
@@ -132,7 +141,7 @@ def dashboard(db: Session, restaurant: Restaurant, on_date: date) -> dict:
         "date": on_date,
         "sales_quantity": sales_today,
         "waste_quantity": waste_today,
-        "waste_rate": round(waste_today / denominator, 4) if denominator else 0.0,
+        "waste_rate": waste_rate(sales_today, waste_today),
         "estimated_waste_cost": total_cost if has_cost else None,
         "currency": restaurant.currency,
         "series": series,
@@ -161,7 +170,6 @@ def summary(db: Session, restaurant: Restaurant, days: int = 30) -> dict:
 
     sales_total = sum(sales.values())
     waste_total, waste_cost, has_cost = _waste_totals(waste_detail)
-    denominator = sales_total + waste_total
 
     weekly: dict[date, dict] = {}
     for day, quantity in sales.items():
@@ -180,7 +188,7 @@ def summary(db: Session, restaurant: Restaurant, days: int = 30) -> dict:
         "end": end,
         "sales_quantity": sales_total,
         "waste_quantity": round(waste_total, 2),
-        "waste_rate": round(waste_total / denominator, 4) if denominator else 0.0,
+        "waste_rate": waste_rate(sales_total, waste_total),
         "estimated_waste_cost": waste_cost if has_cost else None,
         "currency": restaurant.currency,
         "top_wasted": [

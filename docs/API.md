@@ -1,6 +1,7 @@
 # FoodWasteOS API contract (v1)
 
-Base URL: `/api/v1` · Auth: `Authorization: Bearer <supabase-jwt>` · JSON only (except CSV upload)
+Base URL: `/api/v1` · Auth: `Authorization: Bearer <supabase-jwt>` (scheduled jobs use
+`X-Cron-Secret`) · JSON only (except CSV upload)
 
 All data is scoped to the caller's restaurant. Dates are `YYYY-MM-DD`; timestamps are ISO-8601 UTC;
 quantities are integers (or decimals where the unit is weight).
@@ -11,7 +12,8 @@ Errors use FastAPI's shape:
 { "detail": "food item not found" }
 ```
 
-`401` missing/invalid token · `403` role not allowed · `404` not found in this tenant · `422` validation.
+`401` missing/invalid token · `403` role not allowed · `404` not found in this tenant · `422` validation ·
+`503` service not configured (cron secret unset).
 
 ---
 
@@ -142,13 +144,28 @@ and `observations` count — never a fabricated number.
 { "target_date": "2026-11-16", "force": false }
 ```
 Regenerates only if missing unless `force` is true, then returns the same payload as the plan endpoint.
-Used by the nightly cron (service token) and the planner's Generate button.
+Used by the planner's Generate button. Nightly generation for all tenants uses `/cron/generate`.
 
 ### `GET /forecasts/accuracy?days=28`
 Compares past forecasts with recorded sales.
 ```json
 { "window_days": 28, "evaluated_items": 12, "mae": 5.8, "wape": 0.087,
   "bias": -1.2, "within_band_pct": 78.4, "stockout_days": 3 }
+```
+
+---
+
+## Scheduled jobs
+
+### `POST /cron/generate`
+Header `X-Cron-Secret: <CRON_SECRET>` (no bearer token). Generates upcoming plans for **all**
+restaurants. `503` if the server has no `CRON_SECRET` configured, `401` if the header is missing,
+`403` if it is wrong.
+```json
+{ "days_ahead": 1, "force": true }
+```
+```json
+{ "restaurants": 3, "plans_generated": 3, "days_ahead": 1, "force": true, "failed": [] }
 ```
 
 ---
